@@ -121,7 +121,7 @@ void save_physical_memory() {
     }
     fwrite(physical_memory, sizeof(unsigned char), PHYSICAL_MEMORY_SIZE, fp);
     fclose(fp);
-    printf("saved to physical memory\n");
+    printf("Saved to physical memory\n");
 }
 
 void save_page_table() {
@@ -132,7 +132,7 @@ void save_page_table() {
     }
     fwrite(page_table, sizeof(page_table_entry), VIRTUAL_PAGES, fp);
     fclose(fp);
-    printf("saved to page table\n");
+    printf("Saved to page table\n");
 }
 
 void load_physical_memory() {
@@ -145,7 +145,7 @@ void load_physical_memory() {
     } 
     fread(physical_memory, sizeof(unsigned char), PHYSICAL_MEMORY_SIZE, fp);
     fclose(fp); 
-    printf("reading physical memory\n");
+    printf("Reading physical memory\n");
 }
 
 void load_page_table() {
@@ -159,7 +159,7 @@ void load_page_table() {
     }
     fread(page_table, sizeof(page_table_entry), VIRTUAL_PAGES, fp);
     fclose(fp);
-    printf("reading page table\n");
+    printf("Reading page table\n");
 }
 
 
@@ -196,8 +196,8 @@ int main(int argc, char *argv[]) {
         if (physical_ptr == NULL) {
             return 1;
         }
-        printf("reading data from virtual address:%u\n", virtual_address);
-        printf("-> physical address:%ld, value: %d\n",physical_ptr - physical_memory, *physical_ptr);
+        printf("Reading data from virtual address:%u\n", virtual_address);
+        printf("-> Physical address:%ld, value:%d\n",physical_ptr - physical_memory, *physical_ptr);
 
     } else if (strcmp(operation, "write") == 0) {
         //------ write -----
@@ -211,7 +211,7 @@ int main(int argc, char *argv[]) {
             return 1;
         }
         *physical_ptr = (unsigned char)value;
-        printf("-> virtual address:%u, write value:%d to ", virtual_address, value);
+        printf("-> Virtual address:%u, Written value:%d to ", virtual_address, value);
 
     } else {
         printf("Invalid operation");
