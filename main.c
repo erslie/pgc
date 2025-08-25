@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #define PHYSICAL_MEMORY_SIZE (256 * 1024) //256KB
 #define PAGE_SIZE            (4 * 1024)
@@ -19,6 +20,56 @@ typedef struct {
 page_table_entry page_table[VIRTUAL_PAGES];
 unsigned char physical_memory[PHYSICAL_MEMORY_SIZE];
 
+int free_page_frames[PAGE_FRAMES];
+int free_page_frame_count = 0;
+
+int get_free_page_frame() {
+    if (free_page_frame_count > 0) {
+        return free_page_frames[--free_page_frame_count];
+    }
+    return -1;
+}
+
+int handle_page_fault(unsigned int virtual_address) {
+    unsigned int page_number = virtual_address / PAGE_SIZE;
+
+    printf("-> Page fault occuerd. Page loading...\n");
+
+    int frame_num = get_free_page_frame();
+    if (frame_num == -1) {
+        printf("error: physical memory is full\n");
+        return -1;
+    }
+
+    char filename[50];
+    sprintf(filename, "virtual_page_%u.dat", page_number);
+
+    if (access(filename, F_OK) != 0) {
+        printf("-> Created new page file\n");
+        FILE *fp = fopen(filename, "wb");
+        if (fp) {
+            unsigned char empty_page[PAGE_SIZE] = {0};
+            fwrite(empty_page, 1, PAGE_SIZE, fp);
+            fclose(fp);
+        }
+    }
+    FILE *fp = fopen(filename, "rb");
+    if (fp == NULL) {
+        return -1;
+    }
+    fseek(fp, 0, SEEK_SET);
+    fread(&physical_memory[frame_num * PAGE_SIZE], 1, PAGE_SIZE, fp);;
+    fclose(fp);
+
+    printf("-> Page load succeeded\n");
+    
+    page_table[page_number].present = 1;
+    page_table[page_number].page_frame_number = frame_num;
+
+    return 0;
+}
+
+
 unsigned char* translate_address(unsigned int virtual_address) {
 
     unsigned int page_number = virtual_address / PAGE_SIZE;
@@ -29,13 +80,13 @@ unsigned char* translate_address(unsigned int virtual_address) {
         return NULL;
     }
 
-    page_table_entry pte = page_table[page_number];
-    if (pte.present = 0) {
-        printf("Page fault! virtual address:%d is not found\n", virtual_address);
-        return NULL;
+    if (page_table[page_number].present == 0) {
+        if (handle_page_fault(virtual_address) != 0) {
+            return NULL;
+        }
     }
 
-    unsigned int physical_address = (pte.page_frame_number * PAGE_SIZE) + offset;
+    unsigned int physical_address = (page_table[page_number].page_frame_number * PAGE_SIZE) + offset;
     if (physical_address >= PHYSICAL_MEMORY_SIZE) {
         printf("error: Physical address:%d is out of range\n", physical_address);
         return NULL;
@@ -45,19 +96,21 @@ unsigned char* translate_address(unsigned int virtual_address) {
 
 }
 
-void init() {
-
-    //--- init page table ---
-
+void init_state() {
+    for (int i = 0; i < PHYSICAL_MEMORY_SIZE; i++) {
+        physical_memory[i] = 0;
+    }
     for (int i = 0; i < VIRTUAL_PAGES; i++) {
         page_table[i].present = 0;
         page_table[i].page_frame_number = -1;
     }
+}
 
-    for (int i = 0; i < PHYSICAL_MEMORY_SIZE; i++) {
-        physical_memory[i] = 0;
+void init_free_page_frame() {
+    for (int i = 0; i < PAGE_FRAMES; i++) {
+        free_page_frames[i] = i;
     }
-
+    free_page_frame_count = PAGE_FRAMES;
 }
 
 void save_physical_memory() {
@@ -112,48 +165,51 @@ void load_page_table() {
 
 int main(int argc, char *argv[]) {
 
-    init();
+    init_state();
  
     load_physical_memory();
 
     load_page_table();
 
-    page_table[0].present = 1;
-    page_table[0].page_frame_number = 0;
+    init_free_page_frame();
 
-    page_table[1].present = 1;
-    page_table[1].page_frame_number = 1;
-
-    page_table[10].present = 1;
-    page_table[10].page_frame_number = 5;
+    for (int i = 0; i < VIRTUAL_PAGES; i++) {
+        if (page_table[i].present == 1) {
+            free_page_frame_count--;
+        }
+    }
 
     if (argc < 3) {
-        printf("usage: ./pgc <read/write> <virtual_address> [value]\n");
+        printf("usage: ./pgc <read/write> <virtual_address> [value:0-255]\n");
         return 1;
     }
 
     char *operation = argv[1];
     unsigned int virtual_address = atoi(argv[2]);
-    unsigned char *physical_ptr = translate_address(virtual_address);
+    unsigned char *physical_ptr;
     
-    if (physical_ptr == NULL) {
-        return 1;
-    }
+
 
     if (strcmp(operation, "read") == 0) {
         //----- read -----
+        physical_ptr = translate_address(virtual_address);
+        if (physical_ptr == NULL) {
+            return 1;
+        }
         printf("reading data from virtual address:%u\n", virtual_address);
         printf("-> physical address:%ld, value: %d\n",physical_ptr - physical_memory, *physical_ptr);
 
-        return 0;
-
     } else if (strcmp(operation, "write") == 0) {
         //------ write -----
-        if (argv < 4) {
+        if (argc < 4) {
             printf("Please specify a value for writing\n");
             return 1;
         }
         int value = atoi(argv[3]);
+        physical_ptr = translate_address(virtual_address);
+        if (physical_ptr == NULL) {
+            return 1;
+        }
         *physical_ptr = (unsigned char)value;
         printf("-> virtual address:%u, write value:%d to ", virtual_address, value);
 
@@ -164,7 +220,7 @@ int main(int argc, char *argv[]) {
 
     save_physical_memory();
     save_page_table();
-
+    
     return 0;
 
 }
@@ -173,6 +229,7 @@ int main(int argc, char *argv[]) {
 int test() {
 
     //--- paging test ---
+
     page_table[0].present = 1;
     page_table[0].page_frame_number = 0;
 
